@@ -16,3 +16,5 @@ apps/web/.next
 apps/web/node_modules
 apps/web/pnpm-lock.yaml
 apps/web/.git
+/Volumes/machdext/speakplatform/Final/agenthackathons/.env.test-wallets.local
+/Volumes/machdext/speakplatform/Final/agenthackathons/.env
