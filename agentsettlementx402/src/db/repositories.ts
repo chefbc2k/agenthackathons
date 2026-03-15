@@ -131,6 +131,8 @@ export interface CreateAttemptGroupInput {
 export interface PaymentEventRecord {
   readonly id: string;
   readonly attemptGroupId: string | null;
+  readonly agentId: string | null;
+  readonly serviceId: string | null;
   readonly payerWalletId: string | null;
   readonly payToWalletId: string;
   readonly txHash: string;
@@ -146,6 +148,8 @@ export interface PaymentEventRecord {
 
 export interface CreatePaymentEventInput {
   readonly attemptGroupId: string | null;
+  readonly agentId: string | null;
+  readonly serviceId: string | null;
   readonly payerWalletId: string | null;
   readonly payToWalletId: string;
   readonly txHash: string;

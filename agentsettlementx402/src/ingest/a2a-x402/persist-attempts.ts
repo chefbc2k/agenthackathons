@@ -112,6 +112,8 @@ export const persistPaymentAttempt = async (
 
   // 5. Insert payment event (represents one receipt attempt)
   const paymentEvent = await repositories.paymentEvents.create({
+    agentId, // Direct FK from partner-provided agent identity
+    serviceId, // Direct FK from partner-provided service identity
     txHash: attempt.transactionHash || sourceReference, // Synthetic if no tx
     network: attempt.network,
     asset: attempt.asset,

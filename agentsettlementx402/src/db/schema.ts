@@ -296,6 +296,8 @@ export const buildPaymentEventIndexes = (
     txHash: AnyPgColumn;
     network: AnyPgColumn;
     attemptGroupId: AnyPgColumn;
+    agentId: AnyPgColumn;
+    serviceId: AnyPgColumn;
     payToWalletId: AnyPgColumn;
     confidenceScore: AnyPgColumn;
   },
@@ -306,6 +308,9 @@ export const buildPaymentEventIndexes = (
       table.network,
     ),
     index("payment_events_attempt_group_idx").on(table.attemptGroupId),
+    index("payment_events_agent_service_idx").on(table.agentId, table.serviceId),
+    index("payment_events_agent_idx").on(table.agentId),
+    index("payment_events_service_idx").on(table.serviceId),
     index("payment_events_payto_idx").on(table.payToWalletId, table.network),
     check(
       "payment_events_confidence_score_range_check",
@@ -319,6 +324,14 @@ export const paymentEvents = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     attemptGroupId: uuid("attempt_group_id").references(referenceAttemptGroupId, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    agentId: uuid("agent_id").references(referenceAgentTableId, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    serviceId: uuid("service_id").references(referenceServiceId, {
       onDelete: "set null",
       onUpdate: "cascade",
     }),

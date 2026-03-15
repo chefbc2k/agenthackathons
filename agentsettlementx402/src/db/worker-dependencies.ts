@@ -73,9 +73,54 @@ export const createDatabaseWorkerDependencies = (
       };
     },
 
-    async listMetricInputs(_asOf: Date): Promise<readonly WorkerMetricsInput[]> {
-      // For now, return empty array - metrics computation would need payment event data
-      return [];
+    async listMetricInputs(asOf: Date): Promise<readonly WorkerMetricsInput[]> {
+      // Query payment events with direct agentId/serviceId FKs (a2a_x402_receipt source only)
+      const payments = await db
+        .select()
+        .from(schema.paymentEvents)
+        .where(
+          and(
+            eq(schema.paymentEvents.source, "a2a_x402_receipt"),
+            sql`${schema.paymentEvents.agentId} IS NOT NULL`,
+            sql`${schema.paymentEvents.serviceId} IS NOT NULL`,
+          ),
+        )
+        .orderBy(desc(schema.paymentEvents.observedAt));
+
+      // Group observations by (agentId, serviceId)
+      const grouped = new Map<string, ObservableMetricEvent[]>();
+
+      for (const payment of payments) {
+        if (!payment.agentId || !payment.serviceId) continue;
+
+        const key = `${payment.agentId}:${payment.serviceId}`;
+        const observations = grouped.get(key) || [];
+
+        observations.push({
+          groupKey: payment.attemptGroupId || null,
+          occurredAt: payment.observedAt,
+          outcome:
+            payment.confidenceTier === "high"
+              ? "success"
+              : payment.confidenceScore < 500
+                ? "failure"
+                : "unknown",
+          payerId: payment.payerWalletId || null,
+        });
+
+        grouped.set(key, observations);
+      }
+
+      // Convert to WorkerMetricsInput format
+      return Array.from(grouped.entries()).map(([key, observations]) => {
+        const [agentId, serviceId] = key.split(":");
+        return {
+          agentId: agentId!,
+          serviceId: serviceId!,
+          observations,
+          evidenceTypes: ["a2a_x402_receipt"],
+        };
+      });
     },
   };
 };
