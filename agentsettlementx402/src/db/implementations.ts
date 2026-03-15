@@ -8,6 +8,7 @@ import type {
   ServiceRepository,
   LinkEdgeRepository,
   ObservableMetricsRepository,
+  PaymentEventRepository,
   CreateAgentInput,
   UpsertAgentCardInput,
   CreateWalletInput,
@@ -15,12 +16,14 @@ import type {
   ServiceLocator,
   UpsertLinkEdgeInput,
   UpsertObservableMetricsInput,
+  CreatePaymentEventInput,
   AgentRecord,
   AgentCardRecord,
   WalletRecord,
   ServiceRecord,
   LinkEdgeRecord,
   ObservableMetricsRecord,
+  PaymentEventRecord,
 } from "./repositories.js";
 
 export const createAgentRepository = (db: DatabaseClient): AgentRepository => {
@@ -294,6 +297,54 @@ export const createObservableMetricsRepository = (
         .values(input)
         .returning();
       return created!;
+    },
+  };
+};
+
+export const createPaymentEventRepository = (
+  db: DatabaseClient,
+): PaymentEventRepository => {
+  return {
+    async create(input: CreatePaymentEventInput): Promise<PaymentEventRecord> {
+      const [result] = await db
+        .insert(schema.paymentEvents)
+        .values(input)
+        .returning();
+      return result!;
+    },
+
+    async findBySourceReference(
+      source: string,
+      sourceReference: string,
+    ): Promise<PaymentEventRecord | null> {
+      const [result] = await db
+        .select()
+        .from(schema.paymentEvents)
+        .where(
+          and(
+            eq(schema.paymentEvents.source, source),
+            eq(schema.paymentEvents.sourceReference, sourceReference),
+          ),
+        )
+        .limit(1);
+      return result ?? null;
+    },
+
+    async findByTxHash(
+      txHash: string,
+      network: string,
+    ): Promise<PaymentEventRecord | null> {
+      const [result] = await db
+        .select()
+        .from(schema.paymentEvents)
+        .where(
+          and(
+            eq(schema.paymentEvents.txHash, txHash),
+            eq(schema.paymentEvents.network, network),
+          ),
+        )
+        .limit(1);
+      return result ?? null;
     },
   };
 };

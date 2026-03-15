@@ -3,6 +3,23 @@ import {
   parseA2aAgentCard,
 } from "../../core/a2a.js";
 
+// Canonical A2A x402 Extension URI from spec v0.1
+const X402_EXTENSION_URI = "https://github.com/google-a2a/a2a-x402/v0.1";
+
+/**
+ * Check if an agent card declares support for the A2A x402 extension
+ * Extension is declared in capabilities.extensions[] array per A2A x402 spec v0.1
+ */
+export const supportsX402Extension = (
+  agentCard: NormalizedA2aAgentCard,
+): boolean => {
+  return (
+    agentCard.capabilities?.extensions?.some(
+      (ext) => ext.uri === X402_EXTENSION_URI,
+    ) ?? false
+  );
+};
+
 export type AgentCardIngestionValidationStatus =
   | "validated"
   | "http_error"

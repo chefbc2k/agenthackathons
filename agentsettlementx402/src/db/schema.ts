@@ -1,6 +1,7 @@
 import {
   type AnyPgColumn,
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -165,6 +166,41 @@ export const wallets = pgTable(
       .notNull(),
   },
   (table) => buildWalletIndexes(table),
+);
+
+export const buildAgentWalletIndexes = (table: {
+  agentId: AnyPgColumn;
+  walletId: AnyPgColumn;
+}) => {
+  return [
+    uniqueIndex("agent_wallets_unique").on(table.agentId, table.walletId),
+    index("agent_wallets_agent_idx").on(table.agentId),
+    index("agent_wallets_wallet_idx").on(table.walletId),
+  ];
+};
+
+export const agentWallets = pgTable(
+  "agent_wallets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    agentId: uuid("agent_id")
+      .references(referenceAgentTableId, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      })
+      .notNull(),
+    walletId: uuid("wallet_id")
+      .references(() => wallets.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      })
+      .notNull(),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => buildAgentWalletIndexes(table),
 );
 
 export const referenceServiceWalletId = () => wallets.id;
