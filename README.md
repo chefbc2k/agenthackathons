@@ -2,6 +2,8 @@
 
 Accord Pay is a Telegram-first bill-pay worker that turns a Telegram DM flow into a typed `PaymentJob`, anchors lifecycle checkpoints on Base Sepolia, executes Visa sandbox invoice/payment-link creation, and returns a proof package with explorer links and a final receipt hash.
 
+The confirmation boundary is replay-safe: re-confirming the same job resumes or returns the existing outcome instead of minting a second onchain job or duplicating Visa artifacts.
+
 ## Workspace
 
 - `apps/web` — Next.js control plane, Telegram webhook endpoints, admin/status UI
