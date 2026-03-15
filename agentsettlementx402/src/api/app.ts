@@ -9,11 +9,15 @@ import type {
   DebugServiceResponse,
   HealthResponse,
   ObservableMetricsResponse,
-  PaginationQuery,
   ReputationResponse,
   ServiceDetailResponse,
   ServiceSummaryResponse,
+  GraphDataResponse,
+  DashboardStatsResponse,
+  TimelineDataResponse,
+  TopAgentsResponse,
 } from "./contracts.js";
+import type { PaginationQuery } from "./contracts.js";
 import {
   agentDetailSchema,
   agentSummarySchema,
@@ -28,6 +32,10 @@ import {
   serviceDetailSchema,
   serviceSummarySchema,
   servicesListResponseSchema,
+  graphDataResponseSchema,
+  dashboardStatsResponseSchema,
+  timelineDataResponseSchema,
+  topAgentsResponseSchema,
 } from "./contracts.js";
 import { NoopListCache, type ListCache, createListCacheKey } from "./cache.js";
 import type { ObservableMetrics } from "../metrics/observable.js";
@@ -80,6 +88,57 @@ export interface DebugServiceRecordView extends ServiceRecordView {
   };
 }
 
+export interface GraphNode {
+  readonly id: string;
+  readonly type: "agent" | "service";
+  readonly label: string;
+  readonly score?: number;
+}
+
+export interface GraphEdge {
+  readonly source: string;
+  readonly target: string;
+  readonly confidence: string;
+  readonly weight: number;
+}
+
+export interface GraphData {
+  readonly nodes: readonly GraphNode[];
+  readonly edges: readonly GraphEdge[];
+}
+
+export interface DashboardStats {
+  readonly totalAgents: number;
+  readonly totalServices: number;
+  readonly totalLinks: number;
+  readonly avgReputationScore: number;
+  readonly recentActivity: {
+    readonly events7d: number;
+    readonly events30d: number;
+  };
+  readonly confidenceDistribution: {
+    readonly low: number;
+    readonly medium: number;
+    readonly high: number;
+    readonly verified: number;
+  };
+}
+
+export interface TimelineDataPoint {
+  readonly date: string;
+  readonly eventCount: number;
+  readonly avgSuccessRate: number;
+}
+
+export interface TopAgent {
+  readonly agentId: string;
+  readonly displayName: string;
+  readonly score: number;
+  readonly serviceCount: number;
+}
+
+export type { PaginationQuery };
+
 export interface ApiDataSource {
   getAgentById(id: string): Promise<AgentRecordView | null>;
   getDebugAgentById?(id: string): Promise<DebugAgentRecordView | null>;
@@ -91,6 +150,10 @@ export interface ApiDataSource {
   listServices(
     pagination: PaginationQuery,
   ): Promise<PaginatedResult<ServiceRecordView>>;
+  getGraphData?(): Promise<GraphData>;
+  getDashboardStats?(): Promise<DashboardStats>;
+  getTimelineData?(days: number): Promise<readonly TimelineDataPoint[]>;
+  getTopAgents?(limit: number): Promise<readonly TopAgent[]>;
 }
 
 export interface ApiAppDependencies {
@@ -613,6 +676,86 @@ export const createApiApp = (dependencies: ApiAppDependencies): ApiApp => {
           return response;
         }
 
+        if (url.pathname === "/api/graph") {
+          if (!dependencies.dataSource.getGraphData) {
+            throw new ApiHttpError(501, "NOT_IMPLEMENTED", "Graph data not available");
+          }
+
+          const graphData = await dependencies.dataSource.getGraphData();
+          const response = createJsonResponse(
+            graphDataResponseSchema,
+            200,
+            {
+              nodes: [...graphData.nodes],
+              edges: [...graphData.edges],
+            } satisfies GraphDataResponse,
+          );
+          logCompletedRequest(logger, "info", request, url.pathname, startedAt, response.status);
+          return response;
+        }
+
+        if (url.pathname === "/api/stats") {
+          if (!dependencies.dataSource.getDashboardStats) {
+            throw new ApiHttpError(501, "NOT_IMPLEMENTED", "Dashboard stats not available");
+          }
+
+          const stats = await dependencies.dataSource.getDashboardStats();
+          const response = createJsonResponse(
+            dashboardStatsResponseSchema,
+            200,
+            stats satisfies DashboardStatsResponse,
+          );
+          logCompletedRequest(logger, "info", request, url.pathname, startedAt, response.status);
+          return response;
+        }
+
+        if (url.pathname === "/api/timeline") {
+          if (!dependencies.dataSource.getTimelineData) {
+            throw new ApiHttpError(501, "NOT_IMPLEMENTED", "Timeline data not available");
+          }
+
+          const days = parseInt(url.searchParams.get("days") || "30", 10);
+          const timelineData = await dependencies.dataSource.getTimelineData(days);
+          const response = createJsonResponse(
+            timelineDataResponseSchema,
+            200,
+            { dataPoints: [...timelineData] } satisfies TimelineDataResponse,
+          );
+          logCompletedRequest(logger, "info", request, url.pathname, startedAt, response.status);
+          return response;
+        }
+
+        if (url.pathname === "/api/agents/top") {
+          if (!dependencies.dataSource.getTopAgents) {
+            throw new ApiHttpError(501, "NOT_IMPLEMENTED", "Top agents not available");
+          }
+
+          const limit = parseInt(url.searchParams.get("limit") || "10", 10);
+          const topAgents = await dependencies.dataSource.getTopAgents(limit);
+          const response = createJsonResponse(
+            topAgentsResponseSchema,
+            200,
+            { items: [...topAgents] } satisfies TopAgentsResponse,
+          );
+          logCompletedRequest(logger, "info", request, url.pathname, startedAt, response.status);
+          return response;
+        }
+
+        if (url.pathname === "/dashboard" || url.pathname === "/") {
+          const fs = await import("node:fs");
+          const path = await import("node:path");
+          const url = await import("node:url");
+          const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+          const dashboardPath = path.join(__dirname, "dashboard.html");
+          const dashboardHtml = fs.readFileSync(dashboardPath, "utf-8");
+
+          return {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+            body: dashboardHtml,
+          };
+        }
+
         throw new ApiHttpError(404, "NOT_FOUND", "Endpoint not found");
       } catch (error) {
         if (error instanceof ApiHttpError) {
@@ -664,7 +807,9 @@ export const createNodeRequestListener = (
           response.setHeader(header, value);
         }
 
-        response.end(JSON.stringify(result.body));
+        // For HTML responses, send body directly; for JSON, stringify
+        const isHtml = result.headers["content-type"]?.includes("text/html");
+        response.end(isHtml ? result.body : JSON.stringify(result.body));
       });
   };
 };

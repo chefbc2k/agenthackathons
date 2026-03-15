@@ -48,6 +48,28 @@ export const x402BazaarResourceSchema = z
   })
   .strict();
 
+// Bazaar API v2 format
+export const x402BazaarResourceV2ItemSchema = z.object({
+  asset: z.string().min(1).optional(),
+  description: z.string().optional(),
+  maxAmountRequired: z.string().optional(),
+  mimeType: z.string().optional(),
+  network: z.string().min(1),
+  outputSchema: z.unknown().optional(),
+  payTo: z.string().min(1),
+  resource: z.string().url(),
+  scheme: z.string().min(1),
+});
+
+export const x402BazaarResourceV2Schema = z.object({
+  accepts: z.array(x402BazaarResourceV2ItemSchema).min(1),
+  resource: z.string().url(),
+  type: z.string().optional(),
+  x402Version: z.number().optional(),
+  lastUpdated: z.string().optional(),
+  metadata: z.unknown().optional(),
+});
+
 export const x402BazaarResourceListSchema = z.array(x402BazaarResourceSchema);
 
 export const a2aX402ReceiptStatusSchema = z.enum([
@@ -239,10 +261,32 @@ export const parseX402PaymentRequired = createParser(
   normalizeX402PaymentRequired,
 );
 
-export const parseX402BazaarResource = createParser(
-  x402BazaarResourceSchema,
-  normalizeX402BazaarResource,
-);
+export const parseX402BazaarResource = (input: unknown) => {
+  // Try v2 format first
+  const v2Result = x402BazaarResourceV2Schema.safeParse(input);
+  if (v2Result.success) {
+    // Extract first accept entry and transform to v1 format
+    const firstAccept = v2Result.data.accepts[0]!;
+    const v1Format: X402BazaarResource = {
+      amount: firstAccept.maxAmountRequired,
+      asset: firstAccept.asset,
+      network: firstAccept.network,
+      payTo: firstAccept.payTo,
+      resource: firstAccept.resource,
+      scheme: firstAccept.scheme,
+      schema: firstAccept.outputSchema ? {
+        output: typeof firstAccept.outputSchema === 'string' ? firstAccept.outputSchema : undefined,
+      } : undefined,
+    };
+    return {
+      success: true as const,
+      data: normalizeX402BazaarResource(v1Format),
+    };
+  }
+
+  // Fall back to v1 format
+  return createParser(x402BazaarResourceSchema, normalizeX402BazaarResource)(input);
+};
 
 export const parseX402BazaarResourceList = createParser(
   x402BazaarResourceListSchema,

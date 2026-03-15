@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-Agent Reputation Graph Dashboard</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #0a0e1a;
+      color: #e4e8f0;
+      display: grid;
+      grid-template-rows: 60px 40vh 1fr;
+      grid-template-columns: 45% 55%;
+      height: 100vh;
+      gap: 12px;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    #header {
+      grid-column: 1 / 3;
+      background: linear-gradient(135deg, #1a1f35 0%, #0f1729 100%);
+      border-radius: 8px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid rgba(100, 150, 255, 0.2);
+    }
+
+    #header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    #search {
+      width: 300px;
+      padding: 8px 12px;
+      border: 1px solid rgba(100, 150, 255, 0.3);
+      background: rgba(15, 23, 42, 0.8);
+      color: #e4e8f0;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    #search:focus {
+      outline: none;
+      border-color: rgba(102, 126, 234, 0.6);
+    }
+
+    #refresh {
+      padding: 8px 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    #refresh:hover {
+      opacity: 0.9;
+    }
+
+    #graph, #charts, #tables {
+      background: rgba(26, 31, 53, 0.6);
+      border-radius: 8px;
+      padding: 16px;
+      border: 1px solid rgba(100, 150, 255, 0.2);
+      overflow: hidden;
+    }
+
+    #graph {
+      grid-row: 2;
+      grid-column: 1;
+    }
+
+    #charts {
+      grid-row: 2;
+      grid-column: 2;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    #tables {
+      grid-row: 3;
+      grid-column: 1 / 3;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      overflow: auto;
+    }
+
+    .chart-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 6px;
+      padding: 12px;
+      border: 1px solid rgba(100, 150, 255, 0.15);
+    }
+
+    .chart-title {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #a0aec0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    svg {
+      display: block;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th {
+      background: rgba(102, 126, 234, 0.15);
+      color: #a0aec0;
+      font-weight: 600;
+      padding: 8px;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 8px;
+      border-bottom: 1px solid rgba(100, 150, 255, 0.1);
+    }
+
+    tr:hover {
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    .table-container {
+      overflow: auto;
+      max-height: 100%;
+    }
+
+    .table-header {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #cbd5e0;
+    }
+
+    .score {
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .score.high {
+      background: rgba(72, 187, 120, 0.2);
+      color: #68d391;
+    }
+
+    .score.medium {
+      background: rgba(237, 137, 54, 0.2);
+      color: #f6ad55;
+    }
+
+    .score.low {
+      background: rgba(245, 101, 101, 0.2);
+      color: #fc8181;
+    }
+
+    .node {
+      cursor: pointer;
+    }
+
+    .node:hover {
+      stroke: white;
+      stroke-width: 3px;
+    }
+
+    .link {
+      stroke: rgba(100, 150, 255, 0.3);
+      stroke-width: 2px;
+    }
+
+    .link.high {
+      stroke: rgba(72, 187, 120, 0.6);
+    }
+
+    .link.medium {
+      stroke: rgba(237, 137, 54, 0.6);
+    }
+
+    .link.low {
+      stroke: rgba(245, 101, 101, 0.6);
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>Cross-Agent Reputation Graph</h1>
+    <input id="search" type="search" placeholder="Search agents or services...">
+    <button id="refresh">↻ Refresh</button>
+  </div>
+
+  <div id="graph">
+    <svg id="graph-svg"></svg>
+  </div>
+
+  <div id="charts">
+    <div class="chart-container">
+      <div class="chart-title">Activity Timeline (30d)</div>
+      <svg id="chart-timeline"></svg>
+    </div>
+    <div class="chart-container">
+      <div class="chart-title">Confidence Distribution</div>
+      <svg id="chart-confidence"></svg>
+    </div>
+    <div class="chart-container">
+      <div class="chart-title">Top Agents by Score</div>
+      <svg id="chart-topagents"></svg>
+    </div>
+    <div class="chart-container">
+      <div class="chart-title">System Overview</div>
+      <svg id="chart-stats"></svg>
+    </div>
+  </div>
+
+  <div id="tables">
+    <div>
+      <div class="table-header">Services (<span id="services-count">0</span>)</div>
+      <div class="table-container" id="services-table"></div>
+    </div>
+    <div>
+      <div class="table-header">Agents (<span id="agents-count">0</span>)</div>
+      <div class="table-container" id="agents-table"></div>
+    </div>
+  </div>
+
+  <script>
+    // API Client
+    const API = {
+      async fetchServices() {
+        const res = await fetch('/services?pageSize=100');
+        return res.json();
+      },
+      async fetchAgents() {
+        const res = await fetch('/agents?pageSize=100');
+        return res.json();
+      },
+      async fetchGraph() {
+        const res = await fetch('/api/graph');
+        return res.json();
+      },
+      async fetchStats() {
+        const res = await fetch('/api/stats');
+        return res.json();
+      },
+      async fetchTimeline() {
+        const res = await fetch('/api/timeline?days=30');
+        return res.json();
+      },
+      async fetchTopAgents() {
+        const res = await fetch('/api/agents/top?limit=10');
+        return res.json();
+      },
+    };
+
+    // Color scales
+    const scoreColor = d3.scaleLinear()
+      .domain([0, 50, 100])
+      .range(['#fc8181', '#f6ad55', '#68d391']);
+
+    const confidenceColor = (tier) => {
+      const colors = {
+        low: '#fc8181',
+        medium: '#f6ad55',
+        high: '#68d391',
+        verified: '#4299e1'
+      };
+      return colors[tier] || '#a0aec0';
+    };
+
+    // Graph Visualization
+    function renderGraph(data) {
+      const container = document.getElementById('graph');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      d3.select('#graph-svg').selectAll('*').remove();
+
+      const svg = d3.select('#graph-svg')
+        .attr('width', width)
+        .attr('height', height);
+
+      if (data.nodes.length === 0) {
+        svg.append('text')
+          .attr('x', width / 2)
+          .attr('y', height / 2)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#a0aec0')
+          .text('No graph data available');
+        return;
+      }
+
+      const simulation = d3.forceSimulation(data.nodes)
+        .force('link', d3.forceLink(data.edges).id(d => d.id).distance(100))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(20));
+
+      const link = svg.append('g')
+        .selectAll('line')
+        .data(data.edges)
+        .join('line')
+        .attr('class', d => `link ${d.confidence}`)
+        .attr('stroke-width', 2);
+
+      const node = svg.append('g')
+        .selectAll('circle')
+        .data(data.nodes)
+        .join('circle')
+        .attr('class', 'node')
+        .attr('r', d => d.type === 'agent' ? 8 : 6)
+        .attr('fill', d => {
+          if (d.type === 'agent' && d.score !== undefined) {
+            return scoreColor(d.score);
+          }
+          return d.type === 'agent' ? '#667eea' : '#764ba2';
+        })
+        .call(d3.drag()
+          .on('start', dragstarted)
+          .on('drag', dragged)
+          .on('end', dragended));
+
+      node.append('title')
+        .text(d => d.label + (d.score !== undefined ? ` (${d.score.toFixed(1)})` : ''));
+
+      simulation.on('tick', () => {
+        link
+          .attr('x1', d => d.source.x)
+          .attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x)
+          .attr('y2', d => d.target.y);
+
+        node
+          .attr('cx', d => d.x)
+          .attr('cy', d => d.y);
+      });
+
+      function dragstarted(event) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        event.subject.fx = event.subject.x;
+        event.subject.fy = event.subject.y;
+      }
+
+      function dragged(event) {
+        event.subject.fx = event.x;
+        event.subject.fy = event.y;
+      }
+
+      function dragended(event) {
+        if (!event.active) simulation.alphaTarget(0);
+        event.subject.fx = null;
+        event.subject.fy = null;
+      }
+    }
+
+    // Timeline Chart
+    function renderTimeline(data) {
+      const container = d3.select('#chart-timeline').node().parentNode;
+      const width = container.clientWidth - 24;
+      const height = container.clientHeight - 40;
+
+      d3.select('#chart-timeline').selectAll('*').remove();
+
+      const svg = d3.select('#chart-timeline')
+        .attr('width', width)
+        .attr('height', height);
+
+      if (!data.dataPoints || data.dataPoints.length === 0) {
+        svg.append('text')
+          .attr('x', width / 2)
+          .attr('y', height / 2)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#a0aec0')
+          .attr('font-size', '12px')
+          .text('No timeline data');
+        return;
+      }
+
+      const margin = { top: 10, right: 10, bottom: 20, left: 30 };
+      const chartWidth = width - margin.left - margin.right;
+      const chartHeight = height - margin.top - margin.bottom;
+
+      const x = d3.scaleTime()
+        .domain(d3.extent(data.dataPoints, d => new Date(d.date)))
+        .range([0, chartWidth]);
+
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(data.dataPoints, d => d.eventCount)])
+        .range([chartHeight, 0]);
+
+      const line = d3.line()
+        .x(d => x(new Date(d.date)))
+        .y(d => y(d.eventCount));
+
+      const g = svg.append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+      g.append('path')
+        .datum(data.dataPoints)
+        .attr('fill', 'none')
+        .attr('stroke', '#667eea')
+        .attr('stroke-width', 2)
+        .attr('d', line);
+
+      g.append('g')
+        .attr('transform', `translate(0,${chartHeight})`)
+        .call(d3.axisBottom(x).ticks(3).tickFormat(d3.timeFormat('%m/%d')))
+        .attr('color', '#a0aec0')
+        .attr('font-size', '10px');
+
+      g.append('g')
+        .call(d3.axisLeft(y).ticks(4))
+        .attr('color', '#a0aec0')
+        .attr('font-size', '10px');
+    }
+
+    // Confidence Pie Chart
+    function renderConfidencePie(stats) {
+      const container = d3.select('#chart-confidence').node().parentNode;
+      const width = container.clientWidth - 24;
+      const height = container.clientHeight - 40;
+
+      d3.select('#chart-confidence').selectAll('*').remove();
+
+      const svg = d3.select('#chart-confidence')
+        .attr('width', width)
+        .attr('height', height);
+
+      const data = [
+        { label: 'Low', value: stats.confidenceDistribution.low, color: '#fc8181' },
+        { label: 'Medium', value: stats.confidenceDistribution.medium, color: '#f6ad55' },
+        { label: 'High', value: stats.confidenceDistribution.high, color: '#68d391' },
+        { label: 'Verified', value: stats.confidenceDistribution.verified, color: '#4299e1' },
+      ].filter(d => d.value > 0);
+
+      if (data.length === 0) {
+        svg.append('text')
+          .attr('x', width / 2)
+          .attr('y', height / 2)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#a0aec0')
+          .attr('font-size', '12px')
+          .text('No confidence data');
+        return;
+      }
+
+      const radius = Math.min(width, height) / 2 - 10;
+      const g = svg.append('g')
+        .attr('transform', `translate(${width / 2},${height / 2})`);
+
+      const pie = d3.pie().value(d => d.value);
+      const arc = d3.arc().innerRadius(0).outerRadius(radius);
+
+      g.selectAll('path')
+        .data(pie(data))
+        .join('path')
+        .attr('d', arc)
+        .attr('fill', d => d.data.color)
+        .attr('stroke', '#0a0e1a')
+        .attr('stroke-width', 2);
+
+      g.selectAll('text')
+        .data(pie(data))
+        .join('text')
+        .attr('transform', d => `translate(${arc.centroid(d)})`)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'white')
+        .attr('font-size', '11px')
+        .attr('font-weight', '600')
+        .text(d => d.data.value);
+    }
+
+    // Top Agents Bar Chart
+    function renderTopAgents(data) {
+      const container = d3.select('#chart-topagents').node().parentNode;
+      const width = container.clientWidth - 24;
+      const height = container.clientHeight - 40;
+
+      d3.select('#chart-topagents').selectAll('*').remove();
+
+      const svg = d3.select('#chart-topagents')
+        .attr('width', width)
+        .attr('height', height);
+
+      if (!data.items || data.items.length === 0) {
+        svg.append('text')
+          .attr('x', width / 2)
+          .attr('y', height / 2)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#a0aec0')
+          .attr('font-size', '12px')
+          .text('No agents yet');
+        return;
+      }
+
+      const margin = { top: 5, right: 10, bottom: 5, left: 80 };
+      const chartWidth = width - margin.left - margin.right;
+      const chartHeight = height - margin.top - margin.bottom;
+
+      const x = d3.scaleLinear()
+        .domain([0, 100])
+        .range([0, chartWidth]);
+
+      const y = d3.scaleBand()
+        .domain(data.items.slice(0, 5).map((_, i) => i))
+        .range([0, chartHeight])
+        .padding(0.2);
+
+      const g = svg.append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+      data.items.slice(0, 5).forEach((item, i) => {
+        g.append('rect')
+          .attr('x', 0)
+          .attr('y', y(i))
+          .attr('width', x(item.score))
+          .attr('height', y.bandwidth())
+          .attr('fill', scoreColor(item.score));
+
+        g.append('text')
+          .attr('x', -5)
+          .attr('y', y(i) + y.bandwidth() / 2)
+          .attr('text-anchor', 'end')
+          .attr('dominant-baseline', 'middle')
+          .attr('fill', '#cbd5e0')
+          .attr('font-size', '10px')
+          .text(item.displayName.substring(0, 12));
+
+        g.append('text')
+          .attr('x', x(item.score) + 5)
+          .attr('y', y(i) + y.bandwidth() / 2)
+          .attr('dominant-baseline', 'middle')
+          .attr('fill', '#e4e8f0')
+          .attr('font-size', '10px')
+          .attr('font-weight', '600')
+          .text(item.score.toFixed(0));
+      });
+    }
+
+    // Stats Summary
+    function renderStats(stats) {
+      const container = d3.select('#chart-stats').node().parentNode;
+      const width = container.clientWidth - 24;
+      const height = container.clientHeight - 40;
+
+      d3.select('#chart-stats').selectAll('*').remove();
+
+      const svg = d3.select('#chart-stats')
+        .attr('width', width)
+        .attr('height', height);
+
+      const g = svg.append('g');
+
+      const metrics = [
+        { label: 'Services', value: stats.totalServices },
+        { label: 'Agents', value: stats.totalAgents },
+        { label: 'Links', value: stats.totalLinks },
+        { label: 'Avg Score', value: stats.avgReputationScore.toFixed(1) },
+      ];
+
+      metrics.forEach((metric, i) => {
+        const x = (i % 2) * (width / 2);
+        const y = Math.floor(i / 2) * (height / 2);
+
+        g.append('text')
+          .attr('x', x + width / 4)
+          .attr('y', y + height / 4 - 10)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#a0aec0')
+          .attr('font-size', '11px')
+          .text(metric.label);
+
+        g.append('text')
+          .attr('x', x + width / 4)
+          .attr('y', y + height / 4 + 15)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#667eea')
+          .attr('font-size', '24px')
+          .attr('font-weight', '700')
+          .text(metric.value);
+      });
+    }
+
+    // Tables
+    function renderServicesTable(services) {
+      const container = document.getElementById('services-table');
+      container.innerHTML = '';
+
+      document.getElementById('services-count').textContent = services.length;
+
+      const table = document.createElement('table');
+
+      const thead = document.createElement('thead');
+      thead.innerHTML = `
+        <tr>
+          <th>Resource URL</th>
+          <th>Network</th>
+          <th>Scheme</th>
+        </tr>
+      `;
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      services.forEach(service => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${service.resourceUrl}">${service.resourceUrl}</td>
+          <td>${service.network}</td>
+          <td>${service.scheme}</td>
+        `;
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+
+      container.appendChild(table);
+    }
+
+    function renderAgentsTable(agents) {
+      const container = document.getElementById('agents-table');
+      container.innerHTML = '';
+
+      document.getElementById('agents-count').textContent = agents.length;
+
+      if (agents.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #a0aec0;">No agents available</div>';
+        return;
+      }
+
+      const table = document.createElement('table');
+
+      const thead = document.createElement('thead');
+      thead.innerHTML = `
+        <tr>
+          <th>Name</th>
+          <th>Provider</th>
+        </tr>
+      `;
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      agents.forEach(agent => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${agent.displayName}</td>
+          <td>${agent.providerOrganization || '-'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+
+      container.appendChild(table);
+    }
+
+    // Main Dashboard Load
+    async function loadDashboard() {
+      try {
+        const [graphData, stats, timeline, topAgents, services, agents] = await Promise.all([
+          API.fetchGraph(),
+          API.fetchStats(),
+          API.fetchTimeline(),
+          API.fetchTopAgents(),
+          API.fetchServices(),
+          API.fetchAgents(),
+        ]);
+
+        renderGraph(graphData);
+        renderStats(stats);
+        renderTimeline(timeline);
+        renderConfidencePie(stats);
+        renderTopAgents(topAgents);
+        renderServicesTable(services.items);
+        renderAgentsTable(agents.items);
+      } catch (error) {
+        console.error('Failed to load dashboard:', error);
+      }
+    }
+
+    // Event Listeners
+    document.getElementById('refresh').addEventListener('click', loadDashboard);
+
+    document.getElementById('search').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      document.querySelectorAll('#services-table tbody tr, #agents-table tbody tr').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(query) ? '' : 'none';
+      });
+    });
+
+    // Initial Load
+    loadDashboard();
+  </script>
+</body>
+</html>

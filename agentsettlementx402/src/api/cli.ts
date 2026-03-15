@@ -11,6 +11,8 @@ import {
   type ListCache,
 } from "./cache.js";
 import { createStructuredLogger, type StructuredLogger } from "../observability/index.js";
+import { createDatabaseClientFromEnvironment } from "../db/connection.js";
+import { createDatabaseApiDataSource } from "../db/api-datasource.js";
 
 export const readEnvironment = (): Record<string, string | undefined> => {
   const runtime = globalThis as {
@@ -56,9 +58,10 @@ export const createCacheFromEnvironment = (
 export const createCliApiApp = (
   environment: Readonly<Record<string, string | undefined>>,
 ): ApiApp => {
+  const db = createDatabaseClientFromEnvironment();
   return createApiApp({
     cache: createCacheFromEnvironment(environment),
-    dataSource: createEmptyApiDataSource(),
+    dataSource: createDatabaseApiDataSource(db),
     debugModeEnabled: readDebugMode(environment),
     logger: createLoggerFromEnvironment(environment),
   });

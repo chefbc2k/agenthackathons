@@ -9,6 +9,8 @@ import {
   startWorkerReceiverServer,
 } from "./receiver.js";
 import { createUpstashWorkerIdempotencyStore } from "./idempotency.js";
+import { createDatabaseClientFromEnvironment } from "../db/connection.js";
+import { createDatabaseWorkerDependencies } from "../db/worker-dependencies.js";
 
 const readEnvironment = (): Record<string, string | undefined> => {
   const runtime = globalThis as {
@@ -31,9 +33,10 @@ export const buildWorkerJobFromConfig = (): WorkerJobPayload => {
 };
 
 export const runWorkerFromEnvironment = async () => {
+  const db = createDatabaseClientFromEnvironment();
   return runWorkerJob(
     buildWorkerJobFromConfig(),
-    createEmptyWorkerDependencies(),
+    createDatabaseWorkerDependencies(db),
   );
 };
 
@@ -48,11 +51,13 @@ export const startWorkerReceiverFromEnvironment = async () => {
     throw new Error("Redis REST credentials are required for the worker receiver");
   }
 
+  const db = createDatabaseClientFromEnvironment();
+
   return startWorkerReceiverServer({
     dependencies: {
       idempotencyStore: createUpstashWorkerIdempotencyStore(redisUrl, redisToken),
       runJob: (payload) =>
-        runWorkerJob(payload, createEmptyWorkerDependencies()),
+        runWorkerJob(payload, createDatabaseWorkerDependencies(db)),
       ...(config.qstash.currentSigningKey && config.qstash.nextSigningKey
         ? {
             verifier: createQstashRequestVerifier({

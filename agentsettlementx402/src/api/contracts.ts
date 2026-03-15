@@ -167,6 +167,83 @@ export const apiErrorResponseSchema = z
   })
   .strict();
 
+export const graphNodeSchema = z
+  .object({
+    id: z.string().min(1),
+    type: z.enum(["agent", "service"]),
+    label: z.string().min(1),
+    score: z.number().min(0).max(100).optional(),
+  })
+  .strict();
+
+export const graphEdgeSchema = z
+  .object({
+    source: z.string().min(1),
+    target: z.string().min(1),
+    confidence: z.string().min(1),
+    weight: z.number().int().min(0).max(1000),
+  })
+  .strict();
+
+export const graphDataResponseSchema = z
+  .object({
+    nodes: z.array(graphNodeSchema),
+    edges: z.array(graphEdgeSchema),
+  })
+  .strict();
+
+export const dashboardStatsResponseSchema = z
+  .object({
+    totalAgents: z.number().int().min(0),
+    totalServices: z.number().int().min(0),
+    totalLinks: z.number().int().min(0),
+    avgReputationScore: z.number().min(0).max(100),
+    recentActivity: z
+      .object({
+        events7d: z.number().int().min(0),
+        events30d: z.number().int().min(0),
+      })
+      .strict(),
+    confidenceDistribution: z
+      .object({
+        low: z.number().int().min(0),
+        medium: z.number().int().min(0),
+        high: z.number().int().min(0),
+        verified: z.number().int().min(0),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const timelineDataPointSchema = z
+  .object({
+    date: z.string().min(1),
+    eventCount: z.number().int().min(0),
+    avgSuccessRate: z.number().min(0).max(1),
+  })
+  .strict();
+
+export const timelineDataResponseSchema = z
+  .object({
+    dataPoints: z.array(timelineDataPointSchema),
+  })
+  .strict();
+
+export const topAgentSchema = z
+  .object({
+    agentId: z.string().min(1),
+    displayName: z.string().min(1),
+    score: z.number().min(0).max(100),
+    serviceCount: z.number().int().min(0),
+  })
+  .strict();
+
+export const topAgentsResponseSchema = z
+  .object({
+    items: z.array(topAgentSchema),
+  })
+  .strict();
+
 export type AgentDetailResponse = z.infer<typeof agentDetailSchema>;
 export type AgentSummaryResponse = z.infer<typeof agentSummarySchema>;
 export type AgentsListResponse = z.infer<typeof agentsListResponseSchema>;
@@ -183,3 +260,9 @@ export type ReputationResponse = z.infer<typeof reputationResponseSchema>;
 export type ServiceDetailResponse = z.infer<typeof serviceDetailSchema>;
 export type ServiceSummaryResponse = z.infer<typeof serviceSummarySchema>;
 export type ServicesListResponse = z.infer<typeof servicesListResponseSchema>;
+export type GraphDataResponse = z.infer<typeof graphDataResponseSchema>;
+export type DashboardStatsResponse = z.infer<
+  typeof dashboardStatsResponseSchema
+>;
+export type TimelineDataResponse = z.infer<typeof timelineDataResponseSchema>;
+export type TopAgentsResponse = z.infer<typeof topAgentsResponseSchema>;
